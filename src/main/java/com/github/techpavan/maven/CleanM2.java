@@ -57,7 +57,7 @@ public class CleanM2 {
         JCommander jCommander = parseInputParams(args);
         File repoDir = evaluateM2Path(jCommander);
         String[] filter = argData.isDeleteSource() || argData.isDeleteJavadoc() ? null : new String[]{"pom"};
-        FileUtils.listFiles(repoDir, filter, true).forEach(file -> parseAndEvaluate(file));
+        FileUtils.listFiles(repoDir, filter, true).forEach(CleanM2::parseAndEvaluate);
         processVersion();
         log.info("*********** Files to be deleted ***********");
         DELETE_MAP.forEach((k, v) -> log.info(LS + LS + k + " : " + LS + StringUtils.join(v.stream().sorted().iterator(), LS)));
@@ -98,13 +98,11 @@ public class CleanM2 {
     }
 
     private static void deleteMarked() {
-        DELETE_MAP.values().forEach(fileSet -> {
-            fileSet.forEach(file -> {
-                if (!FileUtils.deleteQuietly(file)) {
-                    DELETE_FAILURE_LIST.add(file);
-                }
-            });
-        });
+        DELETE_MAP.values().forEach(fileSet -> fileSet.forEach(file -> {
+            if (!FileUtils.deleteQuietly(file)) {
+                DELETE_FAILURE_LIST.add(file);
+            }
+        }));
     }
 
     private static void processVersion() {
@@ -121,9 +119,10 @@ public class CleanM2 {
     }
 
     private static String getLatestVersion(Set<FileInfo> versionSet) {
-        List<String> versionList = versionSet.stream().map(f -> f.getVersion()).collect(Collectors.toList());
-        String latest = versionList.stream().map(v -> new ComparableVersion(v)).sorted().reduce((a, b) -> b).get().toString();
-        return latest;
+        List<String> versionList = versionSet.stream().map(FileInfo::getVersion).collect(Collectors.toList());
+        return versionList.stream()
+                .map(ComparableVersion::new)
+                .sorted().reduce((a, b) -> b).get().toString();
     }
 
     private static void parseAndEvaluate(File file) {
@@ -173,14 +172,12 @@ public class CleanM2 {
         if (RESTRICTED_FILES.contains(name)) {
             return true;
         }
-        return RESTRICTED_PATTERN.stream().filter(pattern -> name.contains(pattern)).count() > 0;
+        return RESTRICTED_PATTERN.stream().anyMatch(name::contains);
     }
 
     private static void addToProcessMap(FileInfo fileInfo) {
         String gaId = fileInfo.getGroupId() + ":" + fileInfo.getArtifactId();
-        if (PROCESS_MAP.get(gaId) == null) {
-            PROCESS_MAP.put(gaId, new HashSet<>());
-        }
+        PROCESS_MAP.computeIfAbsent(gaId, k -> new HashSet<>());
         PROCESS_MAP.get(gaId).add(fileInfo.getParentFileInfo());
     }
 
